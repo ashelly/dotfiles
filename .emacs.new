@@ -1,0 +1,291 @@
+(require 'package)
+(add-to-list 'package-archives
+             '("melpa" . "http://melpa.milkbox.net/packages/")
+             t)
+(let ((default-directory "~/.emacs.d/elpa/"))
+  (normal-top-level-add-subdirs-to-load-path))
+
+
+(autoload 'gtags-mode "gtags" "" t)
+(column-number-mode t)
+(add-hook 'c-mode-hook '(lambda () (gtags-mode t)))
+(add-hook 'c++-mode-hook '(lambda () (gtags-mode t)))
+(add-hook 'c-mode-hook '(lambda () (define-key c-mode-base-map (kbd "C-c d") 'disaster)))
+
+(tool-bar-mode nil)
+
+(when window-system 
+;  (speedbar t)
+  (global-set-key "\C-z" 'undo)
+)
+
+;(server-start)
+(load "server")
+(unless (server-running-p) (server-start))
+
+(setq-default indent-tabs-mode nil)
+(setq-default tab-width 2)
+
+(require 'python)
+(require 'auto-complete)
+(require 'yasnippet)
+(require 'json-mode)
+(require 'disaster)
+
+(require 'auto-complete-config)
+(add-to-list 'ac-dictionary-directories "~/.emacs.d//ac-dict")
+(ac-config-default)
+
+(autoload 'pymacs-apply "pymacs")
+(autoload 'pymacs-call "pymacs")
+(autoload 'pymacs-eval "pymacs" nil t)
+(autoload 'pymacs-exec "pymacs" nil t)
+(autoload 'pymacs-load "pymacs" nil t)
+(autoload 'pymacs-autoload "pymacs")
+;;(eval-after-load "pymacs"
+;;  '(add-to-list 'pymacs-load-path YOUR-PYMACS-DIRECTORY"))
+;;(pymacs-load "ropemacs" "rope-")
+;;(setq ropemacs-enable-autoimport t)
+
+;; Initialize Yasnippet                                                                                       
+;Don't map TAB to yasnippet                                                                                    
+;In fact, set it to something we'll never use because                                                          
+;we'll only ever trigger it indirectly.                                                                        
+(setq yas/trigger-key (kbd "C-c <kp-multiply>"))
+;;(yas/initialize)
+(yas/load-directory "/usr/share/emacs/site-lisp/yasnippet/snippets")
+(yas/load-directory "~/.emacs.d/elpa/yasnippet-snippets-20190513.1049/snippets")
+
+
+
+
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(custom-safe-themes
+   (quote
+    ("d91ef4e714f05fff2070da7ca452980999f5361209e679ee988e3c432df24347" "a8245b7cc985a0610d71f9852e9f2767ad1b852c2bdea6f4aadc12cce9c4d6d0" default)))
+ '(el-get-user-package-directory "~/.emacs.d/el-get/packages")
+ '(inhibit-startup-screen t)
+ '(js-indent-level 2)
+ '(python-indent-guess-indent-offset t)
+ '(python-indent-offset 4))
+(custom-set-faces
+ ;; custom-set-faces was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(whitespace-line ((t (:background "misty rose"))))
+ '(whitespace-newline ((t (:foreground "white smoke" :weight normal))))
+ '(whitespace-space ((((class color) (background light)) (:foreground "white smoke"))))
+ '(whitespace-tab ((((class color) (background light)) (:foreground "whitesmoke"))))
+ '(whitespace-trailing ((t (:background "orange1" :weight bold)))))
+
+
+(set-face-attribute 'default nil :font "Liberation Mono-8")
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                                         
+;;; Auto-completion                                                                                            
+;;;  Integrates:                                                                                               
+;;;   1) Rope                                                                                                  
+;;;   2) Yasnippet                                                                                             
+;;;   all with AutoComplete.el                                                                                 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;                                         
+(defun prefix-list-elements (list prefix)
+  (let (value)
+    (nreverse
+     (dolist (element list value)
+      (setq value (cons (format "%s%s" prefix element) value))))))
+(defvar ac-source-rope
+  '((candidates
+     . (lambda ()
+         (prefix-list-elements (rope-completions) ac-target))))
+  "Source for Rope")
+(defun ac-python-find ()
+  "Python `ac-find-function'."
+  (require 'thingatpt)
+  (let ((symbol (car-safe (bounds-of-thing-at-point 'symbol))))
+    (if (null symbol)
+        (if (string= "." (buffer-substring (- (point) 1) (point)))
+            (point)
+          nil)
+      symbol)))
+(defun ac-python-candidate ()
+  "Python `ac-candidates-function'"
+  (let (candidates)
+    (dolist (source ac-sources)
+      (if (symbolp source)
+          (setq source (symbol-value source)))
+      (let* ((ac-limit (or (cdr-safe (assq 'limit source)) ac-limit))
+             (requires (cdr-safe (assq 'requires source)))
+             cand)
+        (if (or (null requires)
+                (>= (length ac-target) requires))
+            (setq cand
+                  (delq nil
+                        (mapcar (lambda (candidate)
+                                  (propertize candidate 'source source))
+                                (funcall (cdr (assq 'candidates source)))))))
+        (if (and (> ac-limit 1)
+                 (> (length cand) ac-limit))
+            (setcdr (nthcdr (1- ac-limit) cand) nil))
+        (setq candidates (append candidates cand))))
+    (delete-dups candidates)))
+
+(add-hook 'python-mode-hook 'jedi:setup) 
+(add-hook 'python-mode-hook
+      (lambda ()
+       ;;from before
+        (setq python-guess-indent t)
+        ;;(setq indent-tabs-mode nil)
+        (setq tab-width 4)
+        (setq python-indent 4)
+		  (local-set-key (kbd "<backtab>") 'python-shift-left)
+		  (local-set-key (kbd "<C-tab>") 'python-shift-right)
+		  (local-set-key (kbd "<C-enter>" 'jedi:complete))
+		  (local-set-key (kbd "<C-.>" 'jedi:goto-definition))
+		  (local-set-key (kbd "<C-c d>" 'jedi:show-doc))
+		  (local-set-key (kbd "<C-c r>" 'jedi:show-doc))
+		  (whitespace-mode)
+		  ;;		  (autopair-mode)
+        ;;new
+		  ;; (auto-complete-mode 1)
+		  ;; (set (make-local-variable 'ac-sources)
+		  ;; 		 (append ac-sources '(ac-source-rope) '(ac-source-yasnippet)))
+		  ;; (set (make-local-variable 'ac-find-function) 'ac-python-find)
+		  ;; (set (make-local-variable 'ac-candidate-function) 'ac-python-candidate)
+		  ;; (set (make-local-variable 'ac-auto-start) nil)
+		  ))
+
+
+
+(add-hook 'js-mode-hook
+      (lambda ()
+		  (setq tab-width 2)
+		  (setq indent-tabs-mode nil)
+		  (whitespace-mode)
+		  ))
+
+
+(eval-after-load "python-mode"
+  '(progn
+	  (defvar python-keywords-wanting-colon
+		 '("def" "class" "if" "while" "else"
+			"try" "except" "finally" "for" "lambda"))
+	  
+	  (defvar python-kwc-regexp nil)
+	  
+	  (require 'advice)
+	  (defadvice py-newline-and-indent (before always-insert-colons activate)
+		 "Always make sure that colons appear in the appropriate place."
+		 (unless (eq (char-before) ?:)
+			(let ((here (point))
+					insert-colon already-has-it)
+			  (save-excursion
+				 (beginning-of-line)
+				 (save-excursion
+					(if (search-forward ":" here t)
+						 (setq already-has-it t)))
+				 (unless already-has-it
+					(unless python-kwc-regexp
+					  (require 'regexp-opt)
+					  (setq python-kwc-regexp
+							  (concat "\\s-*\\<"
+										 (regexp-opt python-keywords-wanting-colon t)
+										 "\\>")))
+					(if (looking-at python-kwc-regexp)
+						 (setq insert-colon t))))
+			  (if insert-colon
+					(let ((last-command-char ?:))
+					  (py-electric-colon nil))))))))
+
+;;Ryan's python specific tab completion                                                                        
+;; (defun ryan-python-tab ()
+;;   ; Try the following:                                                                                         
+;;   ; 1) Do a yasnippet expansion                                                                                
+;;   ; 2) Do a Rope code completion                                                                               
+;;   ; 3) Do an indent                                                                                            
+;;   (interactive)
+;;   (if (eql (ac-start) 0)
+;;       (indent-for-tab-command)))
+
+;; (defadvice ac-start (before advice-turn-on-auto-start activate)
+;;   (set (make-local-variable 'ac-auto-start) t))
+;; (defadvice ac-cleanup (after advice-turn-off-auto-start activate)
+;;   (set (make-local-variable 'ac-auto-start) nil))
+
+;; Toggle window dedication
+(defun toggle-window-dedicated ()
+  "Toggle whether the current active window is dedicated or not"
+  (interactive)
+  (message
+   (if (let (window (get-buffer-window (current-buffer)))
+         (set-window-dedicated-p window 
+                                 (not (window-dedicated-p window))))
+       "Window '%s' is dedicated"
+     "Window '%s' is normal")
+   (current-buffer)))
+
+;; Press [pause] key in each window you want to "freeze"
+(global-set-key [pause] 'toggle-window-dedicated)
+
+(require 'smart-tab)
+(global-smart-tab-mode 1)
+
+(require `ag)
+
+
+(global-set-key (kbd "<f3>") 'query-replace)
+(global-set-key (kbd "<f5>") 'compile)
+(global-set-key (kbd "<f6>") 'call-last-kbd-macro)
+(global-set-key "\C-ck" 'comment-or-uncomment-region)
+(global-set-key "\C-xl" 'bury-buffer)
+(global-set-key (kbd "C-;") 'ag-regexp-project-at-point)
+(global-set-key (kbd "C-:") 'ag-regexp)
+(global-set-key (kbd "C-'") 'next-error)
+(global-set-key (kbd "C-\"") 'previous-error)
+(global-set-key (kbd "<C-next>") 'end-of-buffer)
+(global-set-key (kbd "<C-prev>") 'beginning-of-buffer)
+(global-set-key (kbd "M-s s") 'fixup-whitespace)
+
+(setq auto-mode-alist (cons '("\\.json\\'" . js-mode) auto-mode-alist))
+(setq js-indent-level 2)
+
+
+;; (defun forgot-colon (number)
+;;        "Insert colon on previous line"
+;; 		 (interactive 'd')
+;; 		 (set-mark-command)
+;; 		 (previous-line)
+;; 		 ( move-end-of-line)
+;; 		 (python-electric-colon)
+;; 		 (exchange-point-and-mark)
+;; 		 (set-mark-command)
+;; )
+;;(set-background-color "gray100")
+(set-background-color "ghost white")
+;;(set-background-color "white")
+
+(require 'ido)
+(ido-mode t)
+
+(add-to-list 'load-path "~/.emacs.d/el-get/el-get")
+
+(unless (require 'el-get nil 'noerror)
+  (with-current-buffer
+      (url-retrieve-synchronously
+       "https://raw.github.com/dimitri/el-get/master/el-get-install.el")
+    (let (el-get-master-branch)
+      (goto-char (point-max))
+      (eval-print-last-sexp))))
+
+(el-get 'sync)
+
+(tramp-unload-tramp)
+
+
+(fset 'motionlog-patch
+   [?\C-s ?\\ ?n ?\\ ?r ?\C-m backspace backspace backspace backspace ?\C-k ?\C-s ?M ?O ?T ?I ?O ?N ?> right ?\C-y ?\C-d backspace])
+(put 'downcase-region 'disabled nil)
+(put 'upcase-region 'disabled nil)
